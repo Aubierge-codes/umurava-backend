@@ -1,0 +1,16 @@
+# dependencies
+node_modules
+
+# env files
+.env
+Backend/.env
+
+# build
+Backend/dist
+dist
+
+# misc
+.DS_Store
+*.pem
+uploads/
+eng.traineddata

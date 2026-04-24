@@ -1,0 +1,11 @@
+# Environment
+.env
+
+# Uploaded files
+uploads/
+
+# Dependencies
+node_modules/
+
+# Trained data (large binary)
+*.traineddata
