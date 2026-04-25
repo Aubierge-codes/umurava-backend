@@ -6,7 +6,6 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
-import nodemailer from 'nodemailer';
 import User from '../models/user.models';
 import { generateToken } from '../middleware/auth.middleware';
 import tokenBlacklist from '../utils/tokenBlacklist';
@@ -26,19 +25,11 @@ async function sendEmail(
   code: string,
   type: 'verify' | 'reset' = 'verify'
 ): Promise<void> {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-
   const label = type === 'reset' ? 'Reset your password' : 'Verify your email';
   const description =
     type === 'reset'
       ? 'You requested a password reset. Use the code below to continue.'
-      : 'Thank you for joining Gwiza. Use the code below to verify your account.';
+      : 'Thank you for joining Umurava. Use the code below to verify your account.';
 
   const html = `
   <div style="font-family: Arial, sans-serif; background: #f4f4f4; padding: 30px;">
@@ -64,12 +55,24 @@ async function sendEmail(
     </div>
   </div>`;
 
-  await transporter.sendMail({
-    from: `Gwiza <${process.env.EMAIL_USER}>`,
-    to: toEmail,
-    subject,
-    html,
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Umurava <onboarding@resend.dev>',
+      to: toEmail,
+      subject,
+      html,
+    }),
   });
+
+  if (!response.ok) {
+    const error = await response.json() as { message?: string };
+    throw new Error(`Email failed: ${error.message || 'Unknown error'}`);
+  }
 }
 
 async function verifyGoogleIdToken(idToken: string): Promise<{
@@ -96,7 +99,6 @@ async function verifyGoogleIdToken(idToken: string): Promise<{
   };
 }
 
-// POST /api/auth/signup
 export const signup = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, password, companyName } = req.body;
@@ -115,14 +117,12 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
     });
 
     try {
-      await sendEmail(email, 'Verify your Gwiza account', code, 'verify');
+      await sendEmail(email, 'Verify your Umurava account', code, 'verify');
     } catch (emailErr) {
       const err = emailErr as Error;
       const isDev = process.env.NODE_ENV !== 'production';
-      const isBadCreds =
-        err.message?.includes('535') || err.message?.toLowerCase().includes('credentials');
 
-      if (isDev && isBadCreds) {
+      if (isDev) {
         console.log('\n' + '='.repeat(50));
         console.log('EMAIL NOT CONFIGURED — verification code:');
         console.log(`  Email: ${email} | Code: ${code}`);
@@ -141,7 +141,6 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// POST /api/auth/verify-email
 export const verifyEmail = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, code } = req.body;
@@ -180,7 +179,6 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-// POST /api/auth/login
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
@@ -220,7 +218,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// POST /api/auth/google
 export const googleAuth = async (req: Request, res: Response): Promise<void> => {
   try {
     const idToken = req.body.idToken || req.body.credential;
@@ -287,7 +284,6 @@ function cryptoRandomPassword(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
-// POST /api/auth/forgot-password
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
@@ -301,7 +297,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
       await user.save();
 
       try {
-        await sendEmail(normalizedEmail, 'Reset your Gwiza password', code, 'reset');
+        await sendEmail(normalizedEmail, 'Reset your Umurava password', code, 'reset');
       } catch {
         user.resetPasswordCode = null;
         user.resetPasswordExpires = null;
@@ -318,7 +314,6 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
   }
 };
 
-// POST /api/auth/reset-password
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, code, newPassword } = req.body;
@@ -343,7 +338,6 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// POST /api/auth/logout
 export const logout = async (req: Request, res: Response): Promise<void> => {
   try {
     const authHeader = req.headers.authorization as string;
