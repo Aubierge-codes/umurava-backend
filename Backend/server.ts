@@ -1,7 +1,5 @@
 import dotenv from 'dotenv';
-import path from 'path';
-
-dotenv.config({ path: path.join(process.cwd(), 'Backend', '.env') });
+dotenv.config(); // ← remove the path, remove the path import
 
 import express, { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';

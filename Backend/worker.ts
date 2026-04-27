@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import path from 'path';
-dotenv.config({ path: path.join(process.cwd(), 'Backend', '.env') });
+dotenv.config();
+
 
 import { Worker, Job } from 'bullmq';
 import mongoose from 'mongoose';

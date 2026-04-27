@@ -1,11 +1,8 @@
-import dotenv from 'dotenv';
-import path from 'path';
-dotenv.config({ path: path.join(__dirname, '../.env') });
-
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
+import nodemailer from 'nodemailer';
 import User from '../models/user.models';
 import { generateToken } from '../middleware/auth.middleware';
 import tokenBlacklist from '../utils/tokenBlacklist';
@@ -25,6 +22,14 @@ async function sendEmail(
   code: string,
   type: 'verify' | 'reset' = 'verify'
 ): Promise<void> {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
   const label = type === 'reset' ? 'Reset your password' : 'Verify your email';
   const description =
     type === 'reset'
@@ -55,24 +60,12 @@ async function sendEmail(
     </div>
   </div>`;
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: 'Umurava <onboarding@resend.dev>',
-      to: toEmail,
-      subject,
-      html,
-    }),
+  await transporter.sendMail({
+    from: `Umurava <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject,
+    html,
   });
-
-  if (!response.ok) {
-    const error = await response.json() as { message?: string };
-    throw new Error(`Email failed: ${error.message || 'Unknown error'}`);
-  }
 }
 
 async function verifyGoogleIdToken(idToken: string): Promise<{
@@ -128,6 +121,7 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
         console.log(`  Email: ${email} | Code: ${code}`);
         console.log('='.repeat(50) + '\n');
       } else {
+        console.error('❌ Email error:', err.message);
         await User.findByIdAndDelete(user._id);
         res.status(500).json({ message: 'Could not send verification email. Please try again.' });
         return;
@@ -298,7 +292,9 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
       try {
         await sendEmail(normalizedEmail, 'Reset your Umurava password', code, 'reset');
-      } catch {
+      } catch (emailErr) {
+        const err = emailErr as Error;
+        console.error('❌ Password reset email error:', err.message);
         user.resetPasswordCode = null;
         user.resetPasswordExpires = null;
         await user.save();

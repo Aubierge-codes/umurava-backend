@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import Redis from 'ioredis';
 
-dotenv.config({ path: path.join(process.cwd(), 'Backend', '.env') });
+dotenv.config();
 
 const redis = new Redis('rediss://default:gQAAAAAAATrxAAIgcDI1ZjAzNmM2OGRiZWE0ZTRhOTIyNzBjZTZiOTI1ZDFjYQ@smashing-scorpion-80625.upstash.io:6379', {
   maxRetriesPerRequest: 3,
