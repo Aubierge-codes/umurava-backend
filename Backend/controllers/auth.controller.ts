@@ -105,14 +105,16 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
     const code = generateCode();
     const role = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'applicant';
 
+    const hashedPassword = await bcrypt.hash(password, 12); // ← ADD THIS
+
     const user = await User.create({
       name,
       email,
-      password,
+      password: hashedPassword, // ← USE THIS instead of plain `password`
       companyName: companyName || '',
       role,
       verificationCode: code,
-      verificationCodeExpires: new Date(Date.now() + 15 * 60 * 1000), // FIX 3: wrap in new Date()
+      verificationCodeExpires: Date.now() + 15 * 60 * 1000,
       isVerified: false,
     });
 
