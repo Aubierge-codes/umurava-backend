@@ -1,18 +1,12 @@
-# Render.com deployment config
-# Place this file at the root of the Backend folder
-
 services:
-  # API server
   - type: web
     name: gwiza-api
     env: node
-    buildCommand: npm install
-    startCommand: node server.js
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 4000
       - key: MONGO_URI
         sync: false
       - key: JWT_SECRET
@@ -21,11 +15,9 @@ services:
         sync: false
       - key: REDIS_PORT
         sync: false
-      - key: GEMINI_API_KEY
+      - key: REDIS_PASSWORD
         sync: false
-      - key: EMAIL_USER
-        sync: false
-      - key: EMAIL_PASS
+      - key: RESEND_API_KEY
         sync: false
       - key: ADMIN_EMAILS
         sync: false
@@ -35,13 +27,14 @@ services:
         sync: false
       - key: CLOUDINARY_URL
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
 
-  # Background worker (ranking queue)
   - type: worker
     name: gwiza-worker
     env: node
-    buildCommand: npm install
-    startCommand: node worker.js
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:worker
     envVars:
       - key: NODE_ENV
         value: production
@@ -50,6 +43,8 @@ services:
       - key: REDIS_HOST
         sync: false
       - key: REDIS_PORT
+        sync: false
+      - key: REDIS_PASSWORD
         sync: false
       - key: GEMINI_API_KEY
         sync: false

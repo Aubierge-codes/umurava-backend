@@ -16,6 +16,13 @@ function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// FIX 1: moved above googleAuth so it's defined before it's called
+function cryptoRandomPassword(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+
+
 async function sendEmail(
   toEmail: string,
   subject: string,
@@ -105,28 +112,26 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
       companyName: companyName || '',
       role,
       verificationCode: code,
-      verificationCodeExpires: Date.now() + 15 * 60 * 1000,
+      verificationCodeExpires: new Date(Date.now() + 15 * 60 * 1000), // FIX 3: wrap in new Date()
       isVerified: false,
     });
 
     try {
-      await sendEmail(email, 'Verify your Umurava account', code, 'verify');
-    } catch (emailErr) {
-      const err = emailErr as Error;
-      const isDev = process.env.NODE_ENV !== 'production';
+  await sendEmail(email, 'Verify your Umurava account', code, 'verify');
+} catch (emailErr) {
+  const err = emailErr as Error;
 
-      if (isDev) {
-        console.log('\n' + '='.repeat(50));
-        console.log('EMAIL NOT CONFIGURED — verification code:');
-        console.log(`  Email: ${email} | Code: ${code}`);
-        console.log('='.repeat(50) + '\n');
-      } else {
-        console.error('❌ Email error:', err.message);
-        await User.findByIdAndDelete(user._id);
-        res.status(500).json({ message: 'Could not send verification email. Please try again.' });
-        return;
-      }
-    }
+  // delete the user since they can't verify
+  await User.findByIdAndDelete(user._id);
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('❌ Email failed:', err.message);
+    console.log(`[DEV] code for ${email}: ${code}`);
+  }
+
+  res.status(500).json({ message: 'Could not send verification email. Please try again.' });
+  return;
+}
 
     res.status(201).json({ success: true, message: 'Signup successful! Please verify your email.' });
   } catch (err) {
@@ -233,8 +238,11 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
     let user = existingUser;
 
     if (user) {
-      user.authProvider = user.authProvider === 'google' ? 'google' : 'local';
-      user.googleId = user.googleId || googleUser.sub;
+      // FIX 2: properly upgrade existing user to google auth
+      if (!user.googleId) {
+        user.authProvider = 'google';
+        user.googleId = googleUser.sub;
+      }
       user.name = user.name || googleUser.name;
       user.isVerified = true;
       await user.save();
@@ -274,10 +282,6 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
-function cryptoRandomPassword(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-}
-
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
@@ -294,10 +298,13 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
         await sendEmail(normalizedEmail, 'Reset your Umurava password', code, 'reset');
       } catch (emailErr) {
         const err = emailErr as Error;
+        // FIX 4: clear code and return 500 so user knows email failed
         console.error('❌ Password reset email error:', err.message);
         user.resetPasswordCode = null;
         user.resetPasswordExpires = null;
         await user.save();
+        res.status(500).json({ message: 'Could not send reset email. Please try again.' });
+        return;
       }
     }
 

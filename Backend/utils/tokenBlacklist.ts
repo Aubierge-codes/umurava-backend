@@ -1,10 +1,14 @@
-import dotenv from 'dotenv';
-import path from 'path';
+
 import Redis from 'ioredis';
 
-dotenv.config();
 
-const redis = new Redis('rediss://default:gQAAAAAAATrxAAIgcDI1ZjAzNmM2OGRiZWE0ZTRhOTIyNzBjZTZiOTI1ZDFjYQ@smashing-scorpion-80625.upstash.io:6379', {
+
+// Fixed:
+const redis = new Redis({
+  host: process.env.REDIS_HOST as string,
+  port: parseInt(process.env.REDIS_PORT as string),
+  password: process.env.REDIS_PASSWORD as string,
+  tls: {},    // required for Upstash (rediss://)
   maxRetriesPerRequest: 3,
   connectTimeout: 5000,
   lazyConnect: true,

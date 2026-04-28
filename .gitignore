@@ -14,3 +14,4 @@ dist
 *.pem
 uploads/
 eng.traineddata
+.env
