@@ -16,12 +16,9 @@ function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// FIX 1: moved above googleAuth so it's defined before it's called
 function cryptoRandomPassword(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
-
-
 
 async function sendEmail(
   toEmail: string,
@@ -101,39 +98,47 @@ async function verifyGoogleIdToken(idToken: string): Promise<{
 
 export const signup = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password, companyName } = req.body;
+    const { name, password, companyName } = req.body;
+    const email = req.body.email?.trim().toLowerCase();
+
+    // ✅ FIX: Delete any stuck unverified account with same email
+    await User.deleteOne({ email: email.toLowerCase(), isVerified: false });
+
     const code = generateCode();
     const role = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'applicant';
 
-    const hashedPassword = await bcrypt.hash(password, 12); // ← ADD THIS
+    // ✅ FIX: Hash the password before saving
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     const user = await User.create({
       name,
       email,
-      password: hashedPassword, // ← USE THIS instead of plain `password`
+      password: hashedPassword,
       companyName: companyName || '',
       role,
       verificationCode: code,
-      verificationCodeExpires: Date.now() + 15 * 60 * 1000,
+      verificationCodeExpires: new Date(Date.now() + 15 * 60 * 1000),
       isVerified: false,
     });
 
     try {
-  await sendEmail(email, 'Verify your Umurava account', code, 'verify');
-} catch (emailErr) {
-  const err = emailErr as Error;
+      await sendEmail(email, 'Verify your Umurava account', code, 'verify');
+    } catch (emailErr) {
+      const err = emailErr as Error;
+      const isDev = process.env.NODE_ENV !== 'production';
 
-  // delete the user since they can't verify
-  await User.findByIdAndDelete(user._id);
-
-  if (process.env.NODE_ENV !== 'production') {
-    console.error('❌ Email failed:', err.message);
-    console.log(`[DEV] code for ${email}: ${code}`);
-  }
-
-  res.status(500).json({ message: 'Could not send verification email. Please try again.' });
-  return;
-}
+      if (isDev) {
+        console.log('\n' + '='.repeat(50));
+        console.log('EMAIL NOT CONFIGURED — verification code:');
+        console.log(`  Email: ${email} | Code: ${code}`);
+        console.log('='.repeat(50) + '\n');
+      } else {
+        console.error('❌ Email error:', err.message);
+        await User.findByIdAndDelete(user._id);
+        res.status(500).json({ message: 'Could not send verification email. Please try again.' });
+        return;
+      }
+    }
 
     res.status(201).json({ success: true, message: 'Signup successful! Please verify your email.' });
   } catch (err) {
@@ -144,7 +149,8 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
 
 export const verifyEmail = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, code } = req.body;
+    const { code } = req.body;
+    const email = req.body.email?.trim().toLowerCase();
     const user = await User.findOne({ email });
 
     if (!user) { res.status(404).json({ message: 'User not found' }); return; }
@@ -182,7 +188,8 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const email = req.body.email?.trim().toLowerCase();
 
     const user = await User.findOne({ email }).select('+password');
     if (!user) { res.status(400).json({ message: 'Invalid credentials' }); return; }
@@ -240,7 +247,6 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
     let user = existingUser;
 
     if (user) {
-      // FIX 2: properly upgrade existing user to google auth
       if (!user.googleId) {
         user.authProvider = 'google';
         user.googleId = googleUser.sub;
@@ -280,7 +286,7 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
     });
   } catch (err) {
     const error = err as Error;
-    res.status(400).json({ message: error.message || 'Google authentication failed' });
+    res.status(400).json({ message: err.message || 'Google authentication failed' });
   }
 };
 
@@ -300,7 +306,6 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
         await sendEmail(normalizedEmail, 'Reset your Umurava password', code, 'reset');
       } catch (emailErr) {
         const err = emailErr as Error;
-        // FIX 4: clear code and return 500 so user knows email failed
         console.error('❌ Password reset email error:', err.message);
         user.resetPasswordCode = null;
         user.resetPasswordExpires = null;
@@ -321,7 +326,8 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, code, newPassword } = req.body;
+    const { code, newPassword } = req.body;
+    const email = req.body.email?.trim().toLowerCase();
     const user = await User.findOne({ email });
 
     if (!user) { res.status(404).json({ message: 'User not found' }); return; }
